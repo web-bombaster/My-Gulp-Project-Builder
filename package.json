@@ -12,6 +12,7 @@
 	},
 	"devDependencies": {
 		"browser-sync": "^2.27.5",
+		"browserslist": "^4.21.3",
 		"del": "^6.0.0",
 		"gulp-autoprefixer": "^8.0.0",
 		"gulp-cheerio": "^1.0.0",
