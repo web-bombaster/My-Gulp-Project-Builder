@@ -1,180 +1,240 @@
 'use strict';
 
-const { src, dest, watch, series, parallel } = require('gulp'),
-	path = require('path'),
-	browserSync = require('browser-sync'), // локальный сервер, синхронизация
-	// watch = require('gulp-watch'), // для отслеживания изменений в файлах
-	pug = require('gulp-pug'),
-	includer = require('gulp-x-includer'),
-	sourcemaps = require('gulp-sourcemaps'),
-	sass = require('gulp-sass')(require('sass')),
-	autoprefixer = require('gulp-autoprefixer').default,
-	gcmq = require('gulp-group-css-media-queries'),
-	csscomb = require('gulp-csscomb'), // Можно сконфигурировать причесывалку тут http://csscomb.com/config
-	cleanCSS = require('gulp-clean-css'), // сжимаем css
-	concat = require('gulp-concat'), // объединяем в файл
-	rename = require('gulp-rename'),
-	terser = require('gulp-terser'), // сжимаем скрипты
-	del = require('del'), // для очистки папок, удаления файлов
-	cache = require('gulp-cache'),
-	newer = require('gulp-newer'),
-	ftp = require('vinyl-ftp'), // выгрузка на сервер
-	sharp = require('sharp'),
-	rev = require('gulp-rev').default,
-	revRewrite = require('gulp-rev-rewrite').default,
-	through2 = require('through2'),
-	plumber = require('gulp-plumber'), // сообщения при ошибках
-	notify = require('gulp-notify'), // сообщения при ошибках
-	fs = require('fs'); // это не отдельная установленная зависимость, а это встроено в npm
+console.log('START TIME:', new Date());
 
-const folderProject = 'gorman-main2'; // имя папки конкретного проекта
-const pathToAllProjects = 'D:/verstka/'; // путь до папки со всеми проектами
+const { src, dest, watch, series, parallel } = require('gulp');
+const path = require('path');
+const fs = require('fs');
+const { deleteAsync } = require('del');
+const browserSync = require('browser-sync').create();
 
-const pathToSrc = path.join(pathToAllProjects, folderProject, 'src'); // получаем путь до исходников проекта
-const pathToBuild = path.join(pathToAllProjects, folderProject, 'dist'); // получаем путь до папки билда
+const pug = require('gulp-pug');
+const sass = require('gulp-sass')(require('sass'));
+const sourcemaps = require('gulp-sourcemaps');
+const autoprefixer = require('gulp-autoprefixer').default;
+const cleanCSS = require('gulp-clean-css');
+const terser = require('gulp-terser');
+const rename = require('gulp-rename');
+const includer = require('gulp-x-includer');
+const through2 = require('through2');
+const rev = require('gulp-rev').default;
+const newer = require('gulp-newer');
+const plumber = require('gulp-plumber');
+const sharp = require('sharp');
+const revRewrite = require('gulp-rev-rewrite').default;
+const notify = require('gulp-notify'); // сообщения при ошибках
+const gcmq = require('gulp-group-css-media-queries');
 
-	// ======================
-// Конфиг путей
+const isProd = process.argv.includes('--prod');
+
+// ======================
+// PROJECT SELECTION
 // ======================
 
-var config = {
-	// указываем источник для каждого типа
-	source: {
-		html: pathToBuild + '/index.html',
-		pug: pathToSrc + '/pug/pages/index.pug',
-		sass: pathToSrc + '/sass/**/*.+(scss|sass)',
-		js: pathToSrc + '/js/common.js', // тут собираем в кучу свои скрипты
-		libs: pathToSrc + '/libs/libs-includ.js', // инклюдим все js библиотеки, а потом инклюдим собранные свои скрипты
-		libscopy: pathToSrc + '/assets/libs/**/*.*', // копируем файлы библиотек
-		fonts: pathToSrc + '/assets/fonts/**/*.woff2',
-		images: pathToSrc + '/assets/images/**/*.{jpg,jpeg,png}',
-		svg: pathToSrc + '/assets/**/*.svg'
+const projectArg = process.argv.find(arg => arg.startsWith('--project='));
+
+if (!projectArg) {
+	throw new Error('Укажи проект: gulp --project=project-name');
+}
+
+const project = projectArg.split('=')[1];
+const root = 'D:/verstka/';
+const projectRoot = path.join(root, project);
+
+console.log('PROJECT ROOT:', projectRoot);
+
+// ======================
+// CONFIG (ТОЛЬКО ОТНОСИТЕЛЬНЫЕ ПУТИ)
+// ======================
+
+const config = {
+	html: {
+		src: 'src/pug/pages/index.pug',
+		watch: 'src/pug/**/*.pug',
+		dest: 'dist'
 	},
-	// указываем, куда будет делаться выгрузка
-	build: {
-		html: pathToBuild,
-		css: pathToBuild + '/css/',
-		js: pathToBuild + '/js/',
-		libs: pathToBuild + '/js/',
-		libscopy: pathToBuild + '/assets/libs/', // копируем файлы библиотек
-		fonts: pathToBuild + '/assets/fonts/',
-		fontsScss: pathToSrc + '/sass/base/_fonts.scss',
-		images: pathToBuild + '/assets/images/',
-		svg: pathToBuild + '/assets/'
+	styles: {
+		src: 'src/sass/**/*.+(scss|sass)',
+		dest: 'dist/css/',
+		root: 'src/sass/'
 	},
-	// указываем, какие файлы будем отслеживать
-	watch: {
-		html: pathToBuild + '/*.html',
-		pug: pathToSrc + '/pug/**/*.pug',
-		sass: pathToSrc + '/sass/**/*.+(scss|sass)',
-		js: pathToSrc + '/js/**/*.js',
-		libs: [pathToSrc + '/libs/libs-includ.js', pathToBuild + '/js/common.min.js' ],
-		fonts: pathToSrc + '/assets/fonts/**/*.woff2',
-		images: pathToSrc + '/assets/images/**/*.{jpg,jpeg,png}',
-		svg: pathToSrc + '/assets/**/*.svg'
+	js: {
+		common: 'src/js/common.js',
+		libs: 'src/libs/libs-includ.js',
+		watch: 'src/js/**/*.js',
+		dest: 'dist/js/'
+	},
+	images: {
+		src: 'src/assets/images/**/*.{jpg,jpeg,png}',
+		watch: 'src/assets/images/**/*.{jpg,jpeg,png}',
+		dest: 'dist/assets/images/'
+	},
+	fonts: {
+		src: 'src/assets/fonts/**/*.woff2',
+		dest: 'dist/assets/fonts/'
 	}
 };
 
-// Запуск локального сервера
-function startServer() {
+// ======================
+// CLEAN
+// ======================
+
+function clean() {
+	return deleteAsync([path.join(projectRoot, 'dist')], { force: true });
+}
+
+// ======================
+// SERVER
+// ======================
+
+function server() {
 	browserSync.init({
-		server: {
-			// при простой верстке шаблона используем настройку server
-			baseDir: pathToBuild
-		},
-		//port: 3002,
-		// proxy: "domain.loc" // при интеграции gulp для работы с cms откдючаем настройку server и используем настройку proxy, в которой указываем локальный домен сайта
+		server: { baseDir: path.join(projectRoot, 'dist') },
 		notify: false
-		// tunnel: true,
-		// tunnel: "projectmane", //Demonstration page: http://projectmane.localtunnel.me
 	});
 }
-exports.startServer = startServer;
 
-// pug в html
-function pugToHtml() {
-	return src(config.source.pug)
-		.pipe(
-			pug({
-				pretty: true
-			})
-		)
+// ======================
+// HTML
+// ======================
+
+function html() {
+
+	const manifestPath = path.join(projectRoot, 'dist/rev/rev-manifest.json');
+
+	return src(config.html.src, { cwd: projectRoot })
+		.pipe(plumber())
+		.pipe(pug({ pretty: !isProd }))
 		.on(
 			'error',
-			notify.onError(function(error) {
-				return 'Message to the notifier: ' + error.message;
+			notify.onError(function (error) {
+				return 'Ошибка в pug: ' + error.message;
 			})
 		)
-		.pipe(dest(config.build.html))
-		.pipe(browserSync.reload({ stream: true }))
 
+		// 1️⃣ В проде меняем png/jpg → webp
+		.pipe(isProd
+			? through2.obj(function (file, _, cb) {
+				if (file.isBuffer()) {
+					let contents = file.contents.toString();
+
+					contents = contents.replace(
+						/assets\/images\/(.*)\.(png|jpg|jpeg)/g,
+						'assets/images/$1.webp'
+					);
+
+					file.contents = Buffer.from(contents);
+				}
+				cb(null, file);
+			})
+			: through2.obj()
+		)
+
+		// 2️⃣ Затем применяем revRewrite
+		.pipe(isProd && fs.existsSync(manifestPath)
+			? revRewrite({
+				manifest: fs.readFileSync(manifestPath),
+				modifyUnreved: filename => filename.replace(/^\//, ''),
+				modifyReved: filename => '/' + filename
+			})
+			: through2.obj()
+		)
+
+		.pipe(dest(config.html.dest, { cwd: projectRoot }));
 }
-exports.pugToHtml = pugToHtml;
 
-// scss в css
-function sassToCss() {
-	return src(config.source.sass)
+// ======================
+// STYLES
+// ======================
+
+function styles() {
+	return src(config.styles.src, { cwd: projectRoot })
 		.pipe(plumber())
-		.pipe(sourcemaps.init()) // инициализация sourcemaps
-		.pipe(sass().on('error', notify.onError())) // sass to css
-		// .pipe(csscomb()) // причесали css - включать перед выгрузкой на проект, т.к. сбивает работу у sourcemaps
-		.pipe(
-			autoprefixer({
-				cascade: false,
-				flexbox: "no-2009"
-			})
-		)
-		// .pipe(gcmq()) // включать перед выгрузкой на прокт, не сбивает работу у sourcemaps
-		// .pipe(cleanCSS()) // Опционально, закомментировать при отладке - включать перед выгрузкой на проект, т.к. сбивает работу у sourcemaps
-		.pipe(rename({ suffix: '.min', prefix: '' }))
-		.pipe(sourcemaps.write('.')) // sourcemaps в dev-режиме
-
-		.pipe(dest(config.build.css))
-		.pipe(browserSync.reload({ stream: true }))
+		.pipe(!isProd ? sourcemaps.init() : through2.obj())
+		.pipe(sass().on('error', notify.onError()))
+		.pipe(autoprefixer({ cascade: false, flexbox: 'no-2009' }))
+		.pipe(isProd ? cleanCSS({ level: 2 }) : through2.obj())
+		.pipe(isProd ? gcmq() : through2.obj()) 
+		.pipe(rename({ suffix: '.min' }))
+		.pipe(!isProd ? sourcemaps.write('.') : through2.obj())
+		.pipe(dest(config.styles.dest, { cwd: projectRoot }))
+		.pipe(browserSync.stream());
 }
-exports.sassToCss = sassToCss;
 
-// common.js - инклюдим файлы скриптов, в которых инициализируем подключаемые библиотеки, пишем свои скрипты
+// ======================
+// JS
+// ======================
+
 function commonJs() {
-	return src(config.source.js)
-		.pipe(plumber())
-		.pipe(includer()) // Комментируем, если работаем с версткой с простой структурой файлов
-		.pipe(rename({ suffix: '.min', prefix: '' }))
-		.pipe(dest(config.build.js))
-}
-exports.commonJs = commonJs;
-
-// libs-includ.js - инклюдим js-библиотеки и common.js, получаем конечный scripts.min.js
-function libsJs() {
-	return src(config.source.libs)
+	return src(config.js.common, { cwd: projectRoot })
 		.pipe(plumber())
 		.pipe(includer())
-		// .pipe(terser()) // Включаем сжетие по необходимости
+		.pipe(isProd ? terser() : through2.obj())
+		.pipe(rename({ suffix: '.min' }))
+		.pipe(dest(config.js.dest, { cwd: projectRoot }));
+}
+
+function libsJs() {
+	return src(config.js.libs, { cwd: projectRoot })
+		.pipe(plumber())
+		.pipe(includer())
+		.pipe(isProd ? terser() : through2.obj())
 		.pipe(rename('scripts.min.js'))
-		.pipe(dest(config.build.libs))
-		.pipe(browserSync.reload({ stream: true }))
+		.pipe(dest(config.js.dest, { cwd: projectRoot }))
+		.pipe(browserSync.stream());
 }
-exports.libsJs = libsJs;
 
-// Копирование библиотек
-function copyLibs() {
-	return src(config.source.libscopy)
-		.pipe(dest(config.build.libscopy))
+// ======================
+// IMAGES
+// ======================
+
+function images() {
+
+	if (!isProd) {
+
+		return src('src/assets/images/**/*.{jpg,jpeg,png}', {
+			cwd: projectRoot,
+			encoding: false
+		})
+			.pipe(dest('dist/assets/images', { cwd: projectRoot }))
+			.pipe(browserSync.stream());
+	}
+
+	return src(config.images.src, {
+		cwd: projectRoot,
+		base: path.join(projectRoot, 'src/assets/images'),
+		encoding: false
+	})
+		.pipe(newer(path.join(projectRoot, 'dist')))
+		.pipe(through2.obj(function (file, _, cb) {
+
+			if (!file.isBuffer()) return cb(null, file);
+
+			sharp(file.contents)
+				.webp({ quality: 80 })
+				.toBuffer()
+				.then(data => {
+					file.contents = data;
+					file.path = file.path.replace(/\.(png|jpg|jpeg)$/i, '.webp');
+					cb(null, file);
+				})
+				.catch(err => cb(err));
+
+		}))
+		.pipe(rev())
+		.pipe(dest(config.images.dest, { cwd: projectRoot }))
+		.pipe(rev.manifest('rev-manifest.json'))
+		.pipe(dest('dist/rev', { cwd: projectRoot }));
 }
-exports.copyLibs = copyLibs;
 
-// Копирование шрифтов
-function copyFons() {
-	return src(config.source.fonts)
-		.pipe(dest(config.build.fonts))
-}
-exports.copyFons = copyFons;
-
+// ======================
 // Автоматическая генерация @font-face
+// ======================
+
 function generateFonts(done) {
 
-	const fontsDir = pathToSrc + '/assets/fonts/';
-	const scssFile = pathToSrc + '/sass/base/_fonts.scss';
+	const fontsDir = config.fonts.src;
+	const scssFile = config.styles.root + '/base/_fonts.scss';
 
 	if (!fs.existsSync(fontsDir)) {
 		done();
@@ -230,126 +290,37 @@ function generateFonts(done) {
 }
 exports.generateFonts = generateFonts;
 
-// Минификация графики jpg и png
-function minImg() {
-	return src(config.source.images, {
-		encoding: false,
-		base: pathToSrc
-	})
-		.pipe(through2.obj(function (file, _, cb) {
+// ======================
+// WATCH
+// ======================
 
-			if (!file.isBuffer()) return cb(null, file);
-
-			const ext = path.extname(file.path).toLowerCase();
-
-			if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') {
-
-				sharp(file.contents)
-					.webp({ quality: 85 })
-					.toBuffer()
-					.then(data => {
-						file.contents = data;
-						file.path = file.path.replace(ext, '.webp');
-						cb(null, file);
-					})
-					.catch(err => cb(err));
-
-			} else {
-				cb(null, file);
-			}
-
-		}))
-		.pipe(rev())
-		.pipe(dest(pathToBuild))
-		.pipe(rev.manifest({
-			path: 'rev-manifest.json',
-			merge: false
-		}))
-		.pipe(dest(pathToBuild + '/rev'));
+function watcher() {
+	watch(config.html.watch, { cwd: projectRoot }, html);
+	watch(config.styles.src, { cwd: projectRoot }, styles);
+	watch(config.js.watch, { cwd: projectRoot }, series(commonJs, libsJs));
+	watch(config.images.watch, { cwd: projectRoot }, images);
+	watch(config.fonts.src, { cwd: projectRoot }, generateFonts);
 }
-exports.minImg = minImg;
 
-// Подмена ссылок на webp в HTML
-function rewriteHtml() {
-
-	const manifestPath = path.join(pathToBuild, 'rev/rev-manifest.json');
-
-	if (!fs.existsSync(manifestPath)) {
-		return Promise.resolve();
-	}
-
-	const manifest = JSON.parse(
-		fs.readFileSync(manifestPath, 'utf8')
-	);
-
-	return src(config.build.html + '/*.html')
-		.pipe(through2.obj(function (file, _, cb) {
-
-			if (!file.isBuffer()) return cb(null, file);
-
-			let html = file.contents.toString();
-
-			// Ищем все src с png/jpg
-			html = html.replace(
-				/(src=["'])([^"']+\.(png|jpg|jpeg))(["'])/g,
-				function (match, p1, imagePath, ext, p4) {
-
-					const cleanPath = imagePath.replace(/^\//, '');
-					const webpPath = cleanPath.replace(/\.(png|jpg|jpeg)$/i, '.webp');
-
-					if (manifest[webpPath]) {
-						return p1 + '/' + manifest[webpPath] + p4;
-					}
-
-					return match;
-				}
-			);
-
-			file.contents = Buffer.from(html);
-			cb(null, file);
-		}))
-		.pipe(dest(config.build.html));
-}
-exports.rewriteHtml = rewriteHtml;
-
-// Удаление папки newbuild
-function clean() {
-	// return del(config.build.html); // работает
-	return del([config.build.html + '/**'], { force: true });
-}
-exports.clean = clean;
-
-// Отслеживание изменяемых вайлов
-function startWatch() {
-	watch(pathToSrc + '/pug/**/*.pug', pugToHtml);
-	watch(config.source.sass, sassToCss);
-	watch(config.watch.js, commonJs);
-	watch(config.watch.libs, libsJs);
-	watch(config.source.libscopy, copyLibs);
-	watch(config.source.images, series(minImg, rewriteHtml));
-	watch(config.source.fonts, copyFons);
-}
-exports.startWatch = startWatch;
-
-// exports.default = series(
-// 	commonJs, libsJs, generateFonts,
-// 	parallel(pugToHtml, sassToCss, copyLibs, copyFons),
-// 	minImg, rewriteHtml,
-// 	parallel(startServer, startWatch)
-// );
+// ======================
+// BUILD
+// ======================
 
 const build = series(
-	commonJs,
-	libsJs,
-	generateFonts,
-	parallel(pugToHtml, sassToCss, copyLibs, copyFons),
-	minImg,
-	rewriteHtml
+	clean,
+	parallel(styles, fonts, generateFonts),
+	series(commonJs, libsJs),
+	images,   // сначала создаём webp + rev-manifest
+	html      // потом переписываем HTML
 );
-exports.build = build;
 
-const serve = series(
-	build,
-	parallel(startServer, startWatch)
-);
-exports.default = serve;
+function fonts() {
+	return src(config.fonts.src, { cwd: projectRoot })
+		.pipe(dest(config.fonts.dest, { cwd: projectRoot }));
+}
+
+const dev = series(build, parallel(server, watcher));
+
+exports.build = build;
+exports.default = dev;
+exports.clean = clean;

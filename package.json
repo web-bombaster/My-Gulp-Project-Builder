@@ -4,9 +4,7 @@
 	"description": "",
 	"main": "gulpfile.js",
 	"dependencies": {
-		"gulp-cache": "^1.1.3",
-		"gulp-csscomb": "^3.1.0",
-		"gulp-x-includer": "^0.1.2"
+		"gulp-csscomb": "^3.1.0"
 	},
 	"browserslist": [
 		"last 2 versions",
@@ -16,33 +14,28 @@
 	],
 	"devDependencies": {
 		"browser-sync": "^3.0.4",
-		"browserslist": "^4.28.1",
 		"del": "^8.0.1",
 		"gulp": "^5.0.1",
 		"gulp-autoprefixer": "^10.0.0",
-		"gulp-cheerio": "^1.0.0",
 		"gulp-clean-css": "^4.3.0",
-		"gulp-concat": "^2.6.1",
 		"gulp-group-css-media-queries": "^1.2.2",
-		"gulp-html-beautify": "^1.0.1",
 		"gulp-newer": "^1.4.0",
 		"gulp-notify": "^5.0.0",
 		"gulp-plumber": "^1.2.1",
 		"gulp-pug": "^5.0.0",
 		"gulp-rename": "^2.1.0",
-		"gulp-replace": "^1.1.3",
 		"gulp-rev": "^12.0.0",
 		"gulp-rev-rewrite": "^6.0.0",
 		"gulp-sass": "^6.0.1",
 		"gulp-sourcemaps": "^3.0.0",
-		"gulp-svgmin": "^4.1.0",
 		"gulp-terser": "^2.1.0",
+		"gulp-x-includer": "^0.1.2",
 		"sass": "^1.97.3",
-		"sharp": "^0.34.5",
-		"vinyl-ftp": "^0.6.1"
+		"sharp": "^0.34.5"
 	},
 	"scripts": {
 		"gulp": "gulp",
+		"prod": "gulp --prod",
 		"clean": "gulp clean",
 		"tasks": "gulp --tasks",
 		"series": "gulp series"
