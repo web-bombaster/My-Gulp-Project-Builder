@@ -24,6 +24,7 @@ const sharp = require('sharp');
 const revRewrite = require('gulp-rev-rewrite').default;
 const notify = require('gulp-notify'); // сообщения при ошибках
 const gcmq = require('gulp-group-css-media-queries');
+const svgSprite = require('gulp-svg-sprite');
 
 const isProd = process.argv.includes('--prod');
 
@@ -69,9 +70,35 @@ const config = {
 		watch: 'src/assets/images/**/*.{jpg,jpeg,png}',
 		dest: 'dist/assets/images/'
 	},
+	svg: {
+		src: 'src/assets/icons/**/*.svg',
+		watch: 'src/assets/icons/**/*.svg',
+		dest: 'dist/assets/icons/'
+	},
 	fonts: {
 		src: 'src/assets/fonts/**/*.woff2',
 		dest: 'dist/assets/fonts/'
+	}
+};
+
+const svgConfig = {
+	mode: {
+		symbol: {
+			sprite: "sprite.svg",
+			example: false
+		}
+	},
+	shape: {
+		transform: [
+			{
+				svgo: {
+					plugins: [
+						{ name: "removeViewBox", active: false },
+						{ name: "removeDimensions", active: true }
+					]
+				}
+			}
+		]
 	}
 };
 
@@ -140,7 +167,8 @@ function html() {
 			: through2.obj()
 		)
 
-		.pipe(dest(config.html.dest, { cwd: projectRoot }));
+		.pipe(dest(config.html.dest, { cwd: projectRoot }))
+		.pipe(browserSync.stream());
 }
 
 // ======================
@@ -228,6 +256,19 @@ function images() {
 }
 
 // ======================
+// SVG 
+// ======================
+
+function svg() {
+	return src(config.svg.src, { cwd: projectRoot })
+		.pipe(plumber())
+		.pipe(svgSprite(svgConfig))
+		.pipe(dest(config.svg.dest, { cwd: projectRoot }))
+		.pipe(browserSync.stream());
+}
+exports.svg = svg;
+
+// ======================
 // Автоматическая генерация @font-face
 // ======================
 
@@ -299,6 +340,7 @@ function watcher() {
 	watch(config.styles.src, { cwd: projectRoot }, styles);
 	watch(config.js.watch, { cwd: projectRoot }, series(commonJs, libsJs));
 	watch(config.images.watch, { cwd: projectRoot }, images);
+	watch(config.svg.watch, { cwd: projectRoot }, svg);
 	watch(config.fonts.src, { cwd: projectRoot }, generateFonts);
 }
 
@@ -308,7 +350,7 @@ function watcher() {
 
 const build = series(
 	clean,
-	parallel(styles, fonts, generateFonts),
+	parallel(styles, svg, fonts, generateFonts),
 	series(commonJs, libsJs),
 	images,   // сначала создаём webp + rev-manifest
 	html      // потом переписываем HTML

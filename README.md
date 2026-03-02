@@ -29,7 +29,7 @@
 2) В терминале переходим в папку сборщика.
 	- gulp --project=projectFolder - дев режим
 	- gulp --project=projectFolder --prod - прод режим
-	- gulp clean --project=gorman-main2 - очистить dist
+	- gulp clean --project=projectFolder - очистить dist
 В командах выше projectFolder - имя папки текущего проекта.
 
 ## Про режимы сборки:
@@ -48,9 +48,15 @@ JS - код минифицирован
 Images - через sharp конвертируются в .webp, через rev() получают hash
 Сервер - server запускается, Watcher не запускеются.
 
+## SVG в спрайт
+Иконки складываем сюда src/assets/icons. Они соберутся в спрайт сюда dist/assets/icons/symbol/sprite.svg
+При верстке в pug используем так:
+	svg.icon
+		use(href="assets/icons/symbol/sprite.svg#Basket")
+
 ## Рекомендуемая структура проекра
 Под указанную ниже структуру настроена сборка. Но вы можете переопределить конфиг под ваши нужды.
-Начальную заготовку проекта можно посмотреть тут:
+Начальную заготовку проекта можно посмотреть тут: https://github.com/web-bombaster/simple-template-for-html-layout-on-gulp-and-pug
 
 ```text
 ├─ dist/    ← сюда всё собирается при билде
