@@ -39,7 +39,7 @@ if (!projectArg) {
 }
 
 const project = projectArg.split('=')[1];
-const root = 'D:/verstka/';
+const root = '/Users/user-11/Documents/Projects/';
 const projectRoot = path.join(root, project);
 
 console.log('PROJECT ROOT:', projectRoot);
@@ -274,15 +274,16 @@ exports.svg = svg;
 
 function generateFonts(done) {
 
-	const fontsDir = config.fonts.src;
-	const scssFile = config.styles.root + '/base/_fonts.scss';
+	const fontsDir = path.join(projectRoot, 'src/assets/fonts');
+	const scssFile = path.join(projectRoot, 'src/sass/base/_fonts.scss');
 
 	if (!fs.existsSync(fontsDir)) {
 		done();
 		return;
 	}
 
-	const fontFiles = fs.readdirSync(fontsDir).filter(file => file.endsWith('.woff2'));
+	const fontFiles = fs.readdirSync(fontsDir)
+		.filter(file => file.endsWith('.woff2'));
 
 	if (fontFiles.length === 0) {
 		done();
@@ -302,17 +303,21 @@ function generateFonts(done) {
 		let fontWeight = 400;
 		let fontStyle = 'normal';
 
-		if (weightName.toLowerCase().includes('thin')) fontWeight = 100;
-		else if (weightName.toLowerCase().includes('extralight')) fontWeight = 200;
-		else if (weightName.toLowerCase().includes('light')) fontWeight = 300;
-		else if (weightName.toLowerCase().includes('regular')) fontWeight = 400;
-		else if (weightName.toLowerCase().includes('medium')) fontWeight = 500;
-		else if (weightName.toLowerCase().includes('semibold')) fontWeight = 600;
-		else if (weightName.toLowerCase().includes('bold')) fontWeight = 700;
-		else if (weightName.toLowerCase().includes('extrabold')) fontWeight = 800;
-		else if (weightName.toLowerCase().includes('black')) fontWeight = 900;
+		const weight = weightName.toLowerCase();
 
-		if (weightName.toLowerCase().includes('italic')) fontStyle = 'italic';
+		if (weight.includes('thin')) fontWeight = 100;
+		else if (weight.includes('extralight')) fontWeight = 200;
+		else if (weight.includes('light')) fontWeight = 300;
+		else if (weight.includes('regular')) fontWeight = 400;
+		else if (weight.includes('medium')) fontWeight = 500;
+		else if (weight.includes('semibold')) fontWeight = 600;
+		else if (weight.includes('bold')) fontWeight = 700;
+		else if (weight.includes('extrabold')) fontWeight = 800;
+		else if (weight.includes('black')) fontWeight = 900;
+
+		if (weight.includes('italic')) {
+			fontStyle = 'italic';
+		}
 
 		fontFaceContent += `
 @font-face {
@@ -350,16 +355,21 @@ function watcher() {
 
 const build = series(
 	clean,
-	parallel(styles, svg, fonts, generateFonts),
+	generateFonts,
+	parallel(styles, svg, fonts),
 	series(commonJs, libsJs),
-	images,   // сначала создаём webp + rev-manifest
-	html      // потом переписываем HTML
+	images,
+	html
 );
 
 function fonts() {
-	return src(config.fonts.src, { cwd: projectRoot })
+	return src(config.fonts.src, {
+		cwd: projectRoot,
+		encoding: false })
 		.pipe(dest(config.fonts.dest, { cwd: projectRoot }));
 }
+
+exports.fonts = fonts;
 
 const dev = series(build, parallel(server, watcher));
 
