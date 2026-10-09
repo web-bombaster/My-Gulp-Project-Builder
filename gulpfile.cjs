@@ -151,8 +151,8 @@ function html() {
 					let contents = file.contents.toString();
 
 					contents = contents.replace(
-						/assets\/images\/(.*)\.(png|jpg|jpeg)/g,
-						'assets/images/$1.webp'
+						/(\/?assets\/images\/[^"'()\s]+)\.(?:png|jpe?g)(?=["'\s)])/gi,
+						'$1.webp'
 					);
 
 					file.contents = Buffer.from(contents);
