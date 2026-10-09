@@ -181,13 +181,45 @@ function html() {
 // ======================
 
 function styles() {
+	const manifestPath = path.join(projectRoot, 'dist/rev/rev-manifest.json');
+
 	return src(config.styles.src, { cwd: projectRoot })
 		.pipe(plumber())
 		.pipe(!isProd ? sourcemaps.init() : through2.obj())
 		.pipe(sass().on('error', notify.onError()))
 		.pipe(autoprefixer({ cascade: false, flexbox: 'no-2009' }))
+
+		// В проде заменяем JPG/PNG на WebP
+		.pipe(isProd
+			? through2.obj(function (file, _, cb) {
+				if (file.isBuffer()) {
+					let contents = file.contents.toString();
+
+					contents = contents.replace(
+						/(url\(\s*['"]?)([^'")\s]+)\.(?:png|jpe?g)(['"]?\s*\))/gi,
+						'$1$2.webp$3'
+					);
+
+					file.contents = Buffer.from(contents);
+				}
+
+				cb(null, file);
+			})
+			: through2.obj()
+		)
+
+		// Подставляем хешированные имена файлов
+		.pipe(isProd && fs.existsSync(manifestPath)
+			? revRewrite({
+				manifest: fs.readFileSync(manifestPath),
+				modifyUnreved: filename => filename.replace(/^\//, ''),
+				modifyReved: filename => '/' + filename
+			})
+			: through2.obj()
+		)
+
 		.pipe(isProd ? cleanCSS({ level: 2 }) : through2.obj())
-		.pipe(isProd ? gcmq() : through2.obj()) 
+		.pipe(isProd ? gcmq() : through2.obj())
 		.pipe(rename({ suffix: '.min' }))
 		.pipe(!isProd ? sourcemaps.write('.') : through2.obj())
 		.pipe(dest(config.styles.dest, { cwd: projectRoot }))
@@ -377,9 +409,9 @@ function watcher() {
 const build = series(
 	clean,
 	generateFonts,
-	parallel(styles, svg, fonts, libs),
-	series(commonJs, libsJs),
+	parallel(svg, fonts, libs),
 	images,
+	parallel(styles, series(commonJs, libsJs)),
 	html
 );
 
