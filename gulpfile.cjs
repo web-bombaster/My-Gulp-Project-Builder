@@ -78,6 +78,11 @@ const config = {
 	fonts: {
 		src: 'src/assets/fonts/**/*.woff2',
 		dest: 'dist/assets/fonts/'
+	},
+	libs: {
+		src: 'src/libs/**/*',
+		watch: 'src/libs/**/*',
+		dest: 'dist/libs/'
 	}
 };
 
@@ -256,6 +261,21 @@ function images() {
 }
 
 // ======================
+// LIBS
+// ======================
+
+function libs() {
+	return src(config.libs.src, {
+		cwd: projectRoot,
+		base: path.join(projectRoot, 'src/libs')
+	})
+		.pipe(dest(config.libs.dest, { cwd: projectRoot }))
+		.pipe(browserSync.stream());
+}
+
+exports.libs = libs;
+
+// ======================
 // SVG 
 // ======================
 
@@ -347,6 +367,7 @@ function watcher() {
 	watch(config.images.watch, { cwd: projectRoot }, images);
 	watch(config.svg.watch, { cwd: projectRoot }, svg);
 	watch(config.fonts.src, { cwd: projectRoot }, generateFonts);
+	watch(config.libs.watch, { cwd: projectRoot }, libs);
 }
 
 // ======================
@@ -356,7 +377,7 @@ function watcher() {
 const build = series(
 	clean,
 	generateFonts,
-	parallel(styles, svg, fonts),
+	parallel(styles, svg, fonts, libs),
 	series(commonJs, libsJs),
 	images,
 	html
