@@ -363,8 +363,8 @@ function generateFonts(done) {
 		else if (weight.includes('regular')) fontWeight = 400;
 		else if (weight.includes('medium')) fontWeight = 500;
 		else if (weight.includes('semibold')) fontWeight = 600;
-		else if (weight.includes('bold')) fontWeight = 700;
 		else if (weight.includes('extrabold')) fontWeight = 800;
+		else if (weight.includes('bold')) fontWeight = 700;
 		else if (weight.includes('black')) fontWeight = 900;
 
 		if (weight.includes('italic')) {
