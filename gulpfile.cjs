@@ -1,3 +1,4 @@
+
 'use strict';
 
 console.log('START TIME:', new Date());
@@ -18,11 +19,10 @@ const rename = require('gulp-rename');
 const includer = require('gulp-x-includer');
 const through2 = require('through2');
 const rev = require('gulp-rev').default;
-const newer = require('gulp-newer');
 const plumber = require('gulp-plumber');
 const sharp = require('sharp');
 const revRewrite = require('gulp-rev-rewrite').default;
-const notify = require('gulp-notify'); // сообщения при ошибках
+const notify = require('gulp-notify');
 const gcmq = require('gulp-group-css-media-queries');
 const svgSprite = require('gulp-svg-sprite');
 
@@ -66,8 +66,8 @@ const config = {
 		dest: 'dist/js/'
 	},
 	images: {
-		src: 'src/assets/images/**/*.{jpg,jpeg,png}',
-		watch: 'src/assets/images/**/*.{jpg,jpeg,png}',
+		src: 'src/assets/images/**/*.{jpg,jpeg,png,webp,svg}',
+		watch: 'src/assets/images/**/*.{jpg,jpeg,png,webp,svg}',
 		dest: 'dist/assets/images/'
 	},
 	svg: {
@@ -144,10 +144,12 @@ function html() {
 			})
 		)
 
-		// 1️⃣ В проде меняем png/jpg → webp
+		// 1. В проде меняем png/jpg/jpeg на webp
 		.pipe(isProd
 			? through2.obj(function (file, _, cb) {
+
 				if (file.isBuffer()) {
+
 					let contents = file.contents.toString();
 
 					contents = contents.replace(
@@ -157,12 +159,13 @@ function html() {
 
 					file.contents = Buffer.from(contents);
 				}
+
 				cb(null, file);
 			})
 			: through2.obj()
 		)
 
-		// 2️⃣ Затем применяем revRewrite
+		// 2. Применяем revRewrite
 		.pipe(isProd && fs.existsSync(manifestPath)
 			? revRewrite({
 				manifest: fs.readFileSync(manifestPath),
@@ -181,6 +184,7 @@ function html() {
 // ======================
 
 function styles() {
+
 	const manifestPath = path.join(projectRoot, 'dist/rev/rev-manifest.json');
 
 	return src(config.styles.src, { cwd: projectRoot })
@@ -192,7 +196,9 @@ function styles() {
 		// В проде заменяем JPG/PNG на WebP
 		.pipe(isProd
 			? through2.obj(function (file, _, cb) {
+
 				if (file.isBuffer()) {
+
 					let contents = file.contents.toString();
 
 					contents = contents.replace(
@@ -231,6 +237,7 @@ function styles() {
 // ======================
 
 function commonJs() {
+
 	return src(config.js.common, { cwd: projectRoot })
 		.pipe(plumber())
 		.pipe(includer())
@@ -240,6 +247,7 @@ function commonJs() {
 }
 
 function libsJs() {
+
 	return src(config.js.libs, { cwd: projectRoot })
 		.pipe(plumber())
 		.pipe(includer())
@@ -253,42 +261,132 @@ function libsJs() {
 // IMAGES
 // ======================
 
+// Проверка необходимости повторной обработки изображений
+function filterChangedImages() {
+
+	return through2.obj(function (file, _, cb) {
+
+		const ext = path.extname(file.path).toLowerCase();
+
+		// JPG/JPEG/PNG после конвертации получают расширение WebP
+		const outputRelative = file.relative
+			.replace(/\.(jpg|jpeg|png)$/i, '.webp')
+			.split(path.sep)
+			.join('/');
+
+		const manifestPath = path.join(
+			projectRoot,
+			'dist/rev/rev-manifest.json'
+		);
+
+		let manifest = {};
+
+		if (fs.existsSync(manifestPath)) {
+
+			try {
+				manifest = JSON.parse(
+					fs.readFileSync(manifestPath, 'utf8')
+				);
+			} catch (err) {
+				return cb(err);
+			}
+		}
+
+		// Получаем путь к готовому файлу из манифеста
+		const outputFile = manifest[outputRelative] || outputRelative;
+
+		const outputPath = path.join(
+			projectRoot,
+			'dist',
+			outputFile
+		);
+
+		// Если готового файла нет — обрабатываем
+		if (!fs.existsSync(outputPath)) {
+			return cb(null, file);
+		}
+
+		try {
+
+			const sourceStat = fs.statSync(file.path);
+			const outputStat = fs.statSync(outputPath);
+
+			// Если исходник новее — обрабатываем
+			if (sourceStat.mtimeMs > outputStat.mtimeMs) {
+				return cb(null, file);
+			}
+
+			// Если исходник не изменился — пропускаем
+			cb();
+
+		} catch (err) {
+			cb(err);
+		}
+
+	});
+}
+
 function images() {
 
+	// DEVELOPMENT
 	if (!isProd) {
 
-		return src('src/assets/images/**/*.{jpg,jpeg,png}', {
+		return src(config.images.src, {
 			cwd: projectRoot,
+			base: path.join(projectRoot, 'src'),
 			encoding: false
 		})
-			.pipe(dest('dist/assets/images', { cwd: projectRoot }))
+			.pipe(dest('dist', { cwd: projectRoot }))
 			.pipe(browserSync.stream());
 	}
 
+	// PRODUCTION
 	return src(config.images.src, {
 		cwd: projectRoot,
-		base: path.join(projectRoot, 'src/assets/images'),
+		base: path.join(projectRoot, 'src'),
 		encoding: false
 	})
-		.pipe(newer(path.join(projectRoot, 'dist')))
+		.pipe(filterChangedImages())
+
+		// Конвертация JPG/JPEG/PNG в WebP
 		.pipe(through2.obj(function (file, _, cb) {
 
-			if (!file.isBuffer()) return cb(null, file);
+			if (!file.isBuffer()) {
+				return cb(null, file);
+			}
 
-			sharp(file.contents)
-				.webp({ quality: 80 })
-				.toBuffer()
-				.then(data => {
-					file.contents = data;
-					file.path = file.path.replace(/\.(png|jpg|jpeg)$/i, '.webp');
-					cb(null, file);
-				})
-				.catch(err => cb(err));
+			const ext = path.extname(file.path).toLowerCase();
+
+			if (['.jpg', '.jpeg', '.png'].includes(ext)) {
+
+				sharp(file.contents)
+					.webp({ quality: 80 })
+					.toBuffer()
+					.then(data => {
+
+						file.contents = data;
+						file.path = file.path.replace(/\.(png|jpg|jpeg)$/i, '.webp');
+
+						cb(null, file);
+					})
+					.catch(err => cb(err));
+
+				return;
+			}
+
+			// SVG и WebP копируются без изменений
+			cb(null, file);
 
 		}))
+
+		// Добавляем хеш к именам файлов
 		.pipe(rev())
-		.pipe(dest(config.images.dest, { cwd: projectRoot }))
-		.pipe(rev.manifest('rev-manifest.json'))
+
+		// Сохраняем изображения в dist
+		.pipe(dest('dist', { cwd: projectRoot }))
+
+		// Создаем или обновляем манифест
+		.pipe(rev.manifest('rev-manifest.json', { merge: true }))
 		.pipe(dest('dist/rev', { cwd: projectRoot }));
 }
 
@@ -297,6 +395,7 @@ function images() {
 // ======================
 
 function libs() {
+
 	return src(config.libs.src, {
 		cwd: projectRoot,
 		base: path.join(projectRoot, 'src/libs')
@@ -308,20 +407,22 @@ function libs() {
 exports.libs = libs;
 
 // ======================
-// SVG 
+// SVG
 // ======================
 
 function svg() {
+
 	return src(config.svg.src, { cwd: projectRoot })
 		.pipe(plumber())
 		.pipe(svgSprite(svgConfig))
 		.pipe(dest(config.svg.dest, { cwd: projectRoot }))
 		.pipe(browserSync.stream());
 }
+
 exports.svg = svg;
 
 // ======================
-// Автоматическая генерация @font-face
+// АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ @FONT-FACE
 // ======================
 
 function generateFonts(done) {
@@ -386,6 +487,7 @@ function generateFonts(done) {
 
 	done();
 }
+
 exports.generateFonts = generateFonts;
 
 // ======================
@@ -393,6 +495,7 @@ exports.generateFonts = generateFonts;
 // ======================
 
 function watcher() {
+
 	watch(config.html.watch, { cwd: projectRoot }, html);
 	watch(config.styles.src, { cwd: projectRoot }, styles);
 	watch(config.js.watch, { cwd: projectRoot }, series(commonJs, libsJs));
@@ -416,9 +519,11 @@ const build = series(
 );
 
 function fonts() {
+
 	return src(config.fonts.src, {
 		cwd: projectRoot,
-		encoding: false })
+		encoding: false
+	})
 		.pipe(dest(config.fonts.dest, { cwd: projectRoot }));
 }
 
